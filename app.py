@@ -1,11 +1,12 @@
 import os
 import io
-import streamlit as st
+from urllib.parse import urlparse
+
 import requests
+import streamlit as st
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from openai import OpenAI
-from urllib.parse import urlparse
 
 try:
     from PyPDF2 import PdfReader
@@ -21,22 +22,36 @@ st.set_page_config(
     layout="wide",
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+
+st.title("Sales Account Intelligence Agent")
+st.caption("Workflow: Intake agent → Web research agent → Brief generation agent.")
+
+if not api_key:
+    st.error("OPENAI_API_KEY was not found. Check your .env file.")
+    st.stop()
+
+client = OpenAI(api_key=api_key)
+
+st.write(
+    "Enter product, prospect, competitor, and optional product-document details "
+    "to create a research-based sales account brief."
+)
 
 
-def normalize_url(url):
+def normalize_url(url: str) -> str:
     url = url.strip()
     if url and not url.startswith(("http://", "https://")):
         url = "https://" + url
     return url
 
 
-def is_valid_url(url):
+def is_valid_url(url: str) -> bool:
     parsed = urlparse(url)
     return bool(parsed.scheme and parsed.netloc)
 
 
-def extract_webpage_text(url):
+def extract_webpage_text(url: str) -> dict:
     headers = {
         "User-Agent": "Mozilla/5.0 (Sales Account Intelligence Agent)"
     }
@@ -71,7 +86,7 @@ def extract_webpage_text(url):
         }
 
 
-def parse_competitor_urls(raw_text):
+def parse_competitor_urls(raw_text: str) -> list[str]:
     if not raw_text.strip():
         return []
 
@@ -83,10 +98,11 @@ def parse_competitor_urls(raw_text):
         normalized = normalize_url(line)
         if is_valid_url(normalized):
             urls.append(normalized)
+
     return urls
 
 
-def collect_competitor_research(competitor_urls):
+def collect_competitor_research(competitor_urls: list[str]) -> tuple[str, list[str]]:
     research_blocks = []
     source_urls = []
 
@@ -112,7 +128,7 @@ def collect_competitor_research(competitor_urls):
     return "\n\n".join(research_blocks)[:8000], source_urls
 
 
-def extract_uploaded_file_text(uploaded_file):
+def extract_uploaded_file_text(uploaded_file) -> str:
     if uploaded_file is None:
         return "Not found in supplied source."
 
@@ -274,7 +290,7 @@ List the source URLs used for the brief as bullet points.
 """
 
 
-def generate_account_brief(prompt_style, **kwargs):
+def generate_account_brief(prompt_style, **kwargs) -> str:
     if prompt_style == "V1":
         prompt = build_prompt_v1(
             product_name=kwargs["product_name"],
@@ -328,9 +344,13 @@ def generate_fallback_brief_v2(
     competitor_urls,
     uploaded_text,
     article_links_text,
-):
+) -> str:
     snippet = webpage_text[:900] if webpage_text else "Not found in supplied source."
-    competitors_display = "\n".join(f"- {url}" for url in competitor_urls) if competitor_urls else "Not found in supplied source."
+    competitors_display = (
+        "\n".join(f"- {url}" for url in competitor_urls)
+        if competitor_urls
+        else "Not found in supplied source."
+    )
     uploaded_summary = uploaded_text[:700] if uploaded_text else "Not found in supplied source."
 
     return f"""
@@ -373,16 +393,6 @@ Hi — I reviewed your website and noticed your organization is focused on initi
 *Fallback brief generated from supplied inputs and retrieved webpage text because live AI generation was unavailable.*
 """
 
-
-st.title("Sales Account Intelligence Agent")
-
-if not os.getenv("OPENAI_API_KEY"):
-    st.error("OPENAI_API_KEY was not found. Check your .env file.")
-    st.stop()
-
-st.write(
-    "Enter product, prospect, competitor, and optional product-document details to create a research-based sales account brief."
-)
 
 with st.form("sales_agent_form"):
     st.subheader("Product Information")
@@ -434,7 +444,10 @@ with st.form("sales_agent_form"):
         "Prompt Version",
         options=["V2 - Assignment Aligned", "V1 - Simple Brief"],
         index=0,
-        help="Use V2 for the rubric-aligned one-pager. V1 is included as an experimentation baseline.",
+        help=(
+            "Use V2 for the rubric-aligned one-pager. "
+            "V1 is included as an experimentation baseline."
+        ),
     )
 
     submitted = st.form_submit_button("Generate Account Brief")
@@ -467,7 +480,9 @@ if submitted:
                 st.error(research["message"])
             else:
                 with st.spinner("Retrieving competitor webpages..."):
-                    competitor_text, competitor_source_urls = collect_competitor_research(competitor_urls)
+                    competitor_text, competitor_source_urls = collect_competitor_research(
+                        competitor_urls
+                    )
 
                 source_urls = [prospect_url] + competitor_source_urls
                 deduped_source_urls = []
@@ -496,6 +511,7 @@ if submitted:
                     st.write(f"**Uploaded file:** {uploaded_file.name}")
 
                 selected_prompt_key = "V2" if prompt_style.startswith("V2") else "V1"
+                st.write(f"**Prompt version used:** {selected_prompt_key}")
 
                 with st.spinner("Generating sales account brief..."):
                     try:
@@ -516,13 +532,24 @@ if submitted:
                         st.write("## Generated Account Brief")
                         st.markdown(brief)
 
+                        st.download_button(
+                            "Download Brief as Markdown",
+                            data=brief,
+                            file_name="account_brief.md",
+                            mime="text/markdown",
+                        )
+
                     except Exception as error:
                         error_text = str(error)
 
-                        if "insufficient_quota" in error_text or "credit_balance_exhausted" in error_text:
+                        if (
+                            "insufficient_quota" in error_text
+                            or "credit_balance_exhausted" in error_text
+                        ):
                             st.warning(
                                 "OpenAI billing quota is exhausted. "
-                                "Showing a fallback brief generated from supplied inputs and retrieved public webpage content."
+                                "Showing a fallback brief generated from supplied inputs "
+                                "and retrieved public webpage content."
                             )
 
                             fallback_brief = generate_fallback_brief_v2(
@@ -540,5 +567,12 @@ if submitted:
 
                             st.write("## Generated Account Brief")
                             st.markdown(fallback_brief)
+
+                            st.download_button(
+                                "Download Fallback Brief as Markdown",
+                                data=fallback_brief,
+                                file_name="account_brief_fallback.md",
+                                mime="text/markdown",
+                            )
                         else:
                             st.error(f"OpenAI request failed: {error}")
