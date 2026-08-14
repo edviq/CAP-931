@@ -1,23 +1,20 @@
 [project]
 name = "cap-931"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sales Account Intelligence Agent built with Streamlit and OpenAI"
 readme = "README.md"
 authors = [
-    { name = "ed", email = "elukyanov@gmail.com" }
+    { name = "Eduard Lukyanov", email = "elukyanov@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.15.0",
-    "openai>=3.0.0",
+    "openai>=1.0.0",
     "pypdf2>=3.0.1",
     "python-dotenv>=1.2.2",
     "requests>=2.34.2",
     "streamlit>=1.61.1",
 ]
-
-[project.scripts]
-cap-931 = "cap_931:main"
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]

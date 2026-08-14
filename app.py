@@ -265,7 +265,7 @@ Return exactly these sections:
 # Account Intelligence Brief
 
 ## Company Strategy
-Summarize the prospect company’s strategy and relevant industry activity based only on supplied text.
+Summarize the prospect companys strategy and relevant industry activity based only on supplied text.
 Mention executive statements, hiring signals, press-release-like information, or technology clues if present.
 
 ## Competitor Mentions
